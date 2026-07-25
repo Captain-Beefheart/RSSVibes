@@ -49,6 +49,11 @@ html[data-accent="slate"]  { --accent: #52657a; }
 
 * { box-sizing: border-box; }
 
+/* The `hidden` attribute must always win, even over elements that set an
+   explicit display (.modal-wrap, .reader). Without this, those overlays —
+   including the blurred modal backdrop — stay on top and block all input. */
+[hidden] { display: none !important; }
+
 html, body { height: 100%; }
 
 body {
