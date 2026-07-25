@@ -99,6 +99,16 @@ data/state.json  your saved dashboard (created on first run)
 
 ## Changelog
 
+### v0.3.1
+
+- **Fix: imports now persist immediately** — imported feeds are written to `data/state.json`
+  the moment you import them, instead of on a 500&nbsp;ms delay. Previously, importing and then
+  closing the app right away (especially in desktop mode, where closing the window stops the
+  server) could drop the write and lose the feeds. Pending edits are also flushed on window
+  close via a beacon, so nothing edited just before closing is lost.
+- **`#river` deep-link** — open RSSVibes straight into the River view (bookmarkable); the URL
+  hash stays in sync as you toggle the view.
+
 ### v0.3.0
 
 - **River of News** — a new **≋ River** view that merges every feed across all pages into
