@@ -800,6 +800,7 @@ function openRiver() {
   $("#board").hidden = true;
   $("#river").hidden = false;
   $("#riverBtn").classList.add("active");
+  if (location.hash.toLowerCase() !== "#river") history.replaceState(null, "", "#river");
   renderRiver();
 }
 function closeRiver() {
@@ -807,6 +808,7 @@ function closeRiver() {
   $("#river").hidden = true;
   $("#board").hidden = false;
   $("#riverBtn").classList.remove("active");
+  if (location.hash.toLowerCase() === "#river") history.replaceState(null, "", location.pathname + location.search);
 }
 
 async function renderRiver() {
@@ -912,6 +914,7 @@ async function init() {
   state.tabs.forEach(t => t.widgets.forEach(w => { if (w.type === "feed" && !w.read) w.read = {}; }));
 
   boot();
+  if (location.hash.toLowerCase() === "#river") openRiver();   // deep-link straight to the river
 }
 
 document.addEventListener("DOMContentLoaded", init);
