@@ -43,8 +43,9 @@ which is what makes the feeds actually load. It also:
 | Theme / accent / columns | **⚙** in the top-right |
 | Read an article | Click an item → reading pane slides in |
 | Import subscriptions | **⚙ → Import Netvibes / OPML** — a Netvibes `.zip`/`.opml` export or any OPML file |
+| Export subscriptions | **⚙ → Export Netvibes / OPML** — save your feeds as a Netvibes-compatible OPML file |
 
-## Importing from Netvibes (or any OPML)
+## Importing & exporting (Netvibes / OPML)
 
 Migrating from Netvibes? Export your subscriptions (Netvibes gives you a `.zip`
 containing an OPML file), then open **⚙ Settings → Import Netvibes / OPML** and pick the
@@ -52,6 +53,12 @@ file. RSSVibes reads the zip directly — no need to unpack it — and recreates
 **tab as a page**, preserving the column and row layout of every feed. Netvibes-specific
 widgets that aren't RSS feeds (saved searches, etc.) are skipped, and imported feeds are
 **added** as new pages so your existing dashboard is left intact.
+
+Going the other way, **⚙ Settings → Export Netvibes / OPML** writes your feeds back out as a
+Netvibes-compatible OPML file (pages become tabs, with per-feed column/row positions), so you
+can move them into another reader — or back into RSSVibes. Because it's the same format the
+importer reads, RSSVibes round-trips its own exports losslessly. OPML only describes feeds, so
+notes/clock/bookmark widgets aren't included — use **Export JSON** for a complete backup.
 
 Plain OPML exports from Feedly, Inoreader, The Old Reader and similar readers work too.
 

@@ -266,6 +266,7 @@ async function fetchFeed(w, force) {
     else {
       feedCache[w.url] = { items: j.items || [], title: j.title || "", loading: false, fetched: Date.now() };
       if ((!w.title || w.title === "New feed") && j.title) w.title = j.title;
+      if (!w.htmlUrl && j.link) { w.htmlUrl = j.link; persist(); }
     }
   } catch (e) {
     feedCache[w.url] = { error: "Could not reach server", loading: false };
@@ -538,9 +539,11 @@ function settingsDialog() {
      <div class="field"><label>Backup</label>
        <div style="display:flex;gap:8px"><button class="btn" id="setExport">Export JSON</button>
        <button class="btn" id="setImport">Import JSON</button></div></div>
-     <div class="field"><label>Import subscriptions</label>
-       <div style="display:flex;gap:8px"><button class="btn" id="setImportOpml">Import Netvibes / OPML…</button></div>
-       <div class="hint">A Netvibes export (.zip or .opml) or any OPML file from another reader — your feeds are added as new pages.</div></div>`,
+     <div class="field"><label>Subscriptions (OPML)</label>
+       <div style="display:flex;gap:8px;flex-wrap:wrap">
+         <button class="btn" id="setExportOpml">Export Netvibes / OPML</button>
+         <button class="btn" id="setImportOpml">Import Netvibes / OPML…</button></div>
+       <div class="hint">Export your feeds as a Netvibes-compatible OPML file, or import a Netvibes .zip/.opml (or OPML from another reader). Notes, clock and bookmark widgets aren't part of the OPML format — use Export JSON for a full backup.</div></div>`,
     `<button class="btn ghost" id="mCancel">Close</button>`);
 
   // accent swatches
@@ -564,14 +567,39 @@ function settingsDialog() {
   $("#mCancel", m).onclick = closeModal;
   $("#setExport", m).onclick = exportState;
   $("#setImport", m).onclick = importState;
+  $("#setExportOpml", m).onclick = exportOpml;
   $("#setImportOpml", m).onclick = importOpml;
 }
 
 function exportState() {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = "dashboard-backup.json"; a.click();
+  a.href = URL.createObjectURL(blob); a.download = "rssvibes-backup.json"; a.click();
   URL.revokeObjectURL(a.href);
+}
+
+/* -------- export feeds as Netvibes-compatible OPML */
+async function exportOpml() {
+  const feeds = state.tabs.reduce((n, t) => n + t.widgets.filter(w => w.type === "feed" && w.url).length, 0);
+  if (!feeds) return toast("No feeds to export", true);
+  try {
+    const r = await fetch("/api/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(state),
+    });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); return toast(e.error || "Export failed", true); }
+    const text = await r.text();
+    const blob = new Blob([text], { type: "text/x-opml" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = (state.settings.brand || "rssvibes").trim().replace(/\s+/g, "-").toLowerCase() + "-subscriptions.opml";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast(`Exported ${feeds} feed${feeds === 1 ? "" : "s"} as OPML`);
+  } catch (e) {
+    toast("Export failed: " + e.message, true);
+  }
 }
 function importState() {
   const inp = document.createElement("input");
@@ -632,7 +660,7 @@ function applyOpmlImport(data) {
         id: uid(), type: "feed",
         col: Math.max(0, Math.min((f.col || 1) - 1, cols - 1)),
         title: f.title || host || "Feed",
-        url: f.url, max: 12, thumbs: true, read: {},
+        url: f.url, htmlUrl: f.htmlUrl || "", max: 12, thumbs: true, read: {},
       };
     });
     const tab = { id: uid(), name: p.name || "Imported", widgets };

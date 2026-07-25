@@ -31,6 +31,7 @@ from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from xml.etree import ElementTree as ET
+from xml.sax.saxutils import escape, quoteattr
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEB_DIR = os.path.join(BASE_DIR, "web")
@@ -486,6 +487,64 @@ def opml_from_upload(raw, content_type=""):
     return parse_opml(text)
 
 
+def build_opml(state):
+    """Serialize RSSVibes state to Netvibes-compatible OPML.
+
+    OPML is a feed-subscription format, so only feed widgets are exported (one
+    <outline> per feed, grouped by page, positioned by col/row). Notes/clock/
+    bookmark widgets have no OPML equivalent and are omitted. The output parses
+    cleanly back through parse_opml(), so RSSVibes round-trips its own exports.
+    """
+    settings = state.get("settings") or {}
+    try:
+        default_cols = max(1, int(settings.get("columns", 3) or 3))
+    except (TypeError, ValueError):
+        default_cols = 3
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    out = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<opml version="1.0">',
+        ' <head>',
+        '  <title>%s</title>' % escape(str(settings.get("brand") or "RSSVibes")),
+        '  <type>Private</type>',
+        '  <creationDate>%s</creationDate>' % stamp,
+        ' </head>',
+        ' <body>',
+    ]
+
+    for tab in state.get("tabs") or []:
+        feeds = [w for w in (tab.get("widgets") or [])
+                 if w.get("type") == "feed" and w.get("url")]
+        if not feeds:
+            continue  # OPML is feed-only; skip pages with no feeds
+        out.append('  <outline title=%s cols="%d" layout="%d-0">'
+                   % (quoteattr(str(tab.get("name") or "Imported")), default_cols, default_cols))
+        rows = {}
+        for w in feeds:
+            try:
+                col = int(w.get("col", 0)) + 1        # OPML columns are 1-based
+            except (TypeError, ValueError):
+                col = 1
+            col = max(1, col)
+            rows[col] = rows.get(col, 0) + 1          # preserve in-column order via row
+            attrs = [
+                'title=%s' % quoteattr(str(w.get("title") or "")),
+                'xmlUrl=%s' % quoteattr(str(w.get("url"))),
+            ]
+            if w.get("htmlUrl"):
+                attrs.append('htmlUrl=%s' % quoteattr(str(w.get("htmlUrl"))))
+            attrs.append('type="rss"')
+            attrs.append('row="%d"' % (rows[col] * 100))
+            attrs.append('col="%d"' % col)
+            out.append('   <outline %s/>' % " ".join(attrs))
+        out.append('  </outline>')
+
+    out.append(' </body>')
+    out.append('</opml>')
+    return "\n".join(out) + "\n"
+
+
 # ---------------------------------------------------------------------------
 # State persistence
 # ---------------------------------------------------------------------------
@@ -590,6 +649,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         if path == "/api/import":
             return self.api_import()
+        if path == "/api/export":
+            return self.api_export()
         if path == "/api/state":
             return self.api_state_put()
         self.send_error(404)
@@ -674,6 +735,25 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({"error": str(e)}, 400)
         except Exception as e:
             return self._send_json({"error": "%s: %s" % (type(e).__name__, e)}, 500)
+
+    def api_export(self):
+        try:
+            state = json.loads(self._read_body() or b"{}")
+        except json.JSONDecodeError as e:
+            return self._send_json({"error": "bad json: %s" % e}, 400)
+        try:
+            opml = build_opml(state)
+        except Exception as e:
+            return self._send_json({"error": "%s: %s" % (type(e).__name__, e)}, 500)
+        body = opml.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/x-opml; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Disposition", 'attachment; filename="rssvibes-subscriptions.opml"')
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
     # -- static ------------------------------------------------------------
     def serve_static(self, path):
