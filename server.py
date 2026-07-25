@@ -12,6 +12,7 @@ Bind is 127.0.0.1 only: this is a single-user local app.
 """
 
 import gzip
+import html
 import io
 import json
 import os
@@ -24,6 +25,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
@@ -379,6 +381,112 @@ def discover_feed(url):
 
 
 # ---------------------------------------------------------------------------
+# OPML import (Netvibes exports + any standard OPML from other readers).
+#
+# Netvibes shape: <body> holds one <outline> per tab (with cols/layout attrs);
+# feed outlines nested inside carry xmlUrl/htmlUrl/type + col/row positions.
+# Non-feed widgets (type="ExtendedVibes", searches, etc.) have no xmlUrl and
+# are skipped. Plain OPML from Feedly/Inoreader/etc. uses the same <outline>
+# grammar, so this importer handles those too.
+# ---------------------------------------------------------------------------
+def _opml_int(v):
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _opml_float(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _cols_from_layout(layout):
+    if not layout:
+        return 0
+    m = re.match(r"\s*(\d+)", layout)
+    return int(m.group(1)) if m else 0
+
+
+def _clean(text):
+    # Netvibes double-encodes some titles (e.g. "&amp;amp;", "Home&amp;#x2F;Gardening"),
+    # so after the XML parser's single decode a second unescape restores the real text.
+    # A no-op for well-formed OPML from other readers.
+    return html.unescape((text or "").strip())
+
+
+def _feed_from_outline(el):
+    return {
+        "title": _clean(el.get("title") or el.get("text")),
+        "url": el.get("xmlUrl") or el.get("xmlurl"),
+        "htmlUrl": el.get("htmlUrl") or el.get("htmlurl") or "",
+        "col": _opml_int(el.get("col")),
+        "row": _opml_float(el.get("row")),
+    }
+
+
+def parse_opml(text):
+    text = text.lstrip("﻿ \r\n\t")
+    root = ET.fromstring(text)
+
+    body = next((el for el in root.iter() if _local(el.tag) == "body"), None)
+    if body is None:
+        raise ValueError("Not an OPML document (no <body> element).")
+    head_title = next((_text(el) for el in root.iter() if _local(el.tag) == "title"), "")
+
+    skipped = [0]
+
+    def collect_feeds(el):
+        feeds = []
+        for child in el:
+            if _local(child.tag) != "outline":
+                continue
+            if child.get("xmlUrl") or child.get("xmlurl"):
+                feeds.append(_feed_from_outline(child))
+            elif len(child):                 # container (e.g. ExtendedVibes) -> recurse
+                feeds.extend(collect_feeds(child))
+            else:                            # leaf widget with no feed URL -> skipped
+                skipped[0] += 1
+        return feeds
+
+    pages, orphans = [], []
+    for top in body:
+        if _local(top.tag) != "outline":
+            continue
+        if top.get("xmlUrl") or top.get("xmlurl"):   # a feed at the top level
+            orphans.append(_feed_from_outline(top))
+            continue
+        name = _clean(top.get("title") or top.get("text")) or "Imported"
+        cols = _opml_int(top.get("cols")) or _cols_from_layout(top.get("layout"))
+        feeds = collect_feeds(top)
+        feeds.sort(key=lambda f: (f["col"] or 1, f["row"]))
+        if feeds:
+            pages.append({"name": name, "columns": cols, "feeds": feeds})
+
+    if orphans:
+        orphans.sort(key=lambda f: (f["col"] or 1, f["row"]))
+        pages.insert(0, {"name": head_title or "Imported", "columns": 0, "feeds": orphans})
+
+    feed_count = sum(len(p["feeds"]) for p in pages)
+    return {"title": head_title, "pages": pages, "feedCount": feed_count, "skipped": skipped[0]}
+
+
+def opml_from_upload(raw, content_type=""):
+    """Accept a raw .opml/.xml body or a .zip (Netvibes wraps its OPML in a zip)."""
+    if raw[:2] == b"PK":  # zip magic
+        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            names = [n for n in zf.namelist() if n.lower().endswith((".opml", ".xml"))]
+            if not names:
+                raise ValueError("No .opml or .xml file found inside the zip.")
+            text = decode_bytes(zf.read(names[0]))
+    else:
+        text = decode_bytes(raw, content_type)
+    return parse_opml(text)
+
+
+# ---------------------------------------------------------------------------
 # State persistence
 # ---------------------------------------------------------------------------
 _state_lock = threading.Lock()
@@ -474,13 +582,17 @@ class Handler(BaseHTTPRequestHandler):
         self.do_GET()
 
     def do_PUT(self):
-        parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/api/state":
+        if urllib.parse.urlparse(self.path).path == "/api/state":
             return self.api_state_put()
         self.send_error(404)
 
     def do_POST(self):
-        self.do_PUT()
+        path = urllib.parse.urlparse(self.path).path
+        if path == "/api/import":
+            return self.api_import()
+        if path == "/api/state":
+            return self.api_state_put()
+        self.send_error(404)
 
     # -- API ---------------------------------------------------------------
     def api_feed(self, qs):
@@ -543,6 +655,25 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({"error": "bad json: %s" % e}, 400)
         save_state(obj)
         return self._send_json({"ok": True})
+
+    def api_import(self):
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length > 25_000_000:
+            return self._send_json({"error": "File too large (max 25 MB)."}, 413)
+        raw = self._read_body()
+        if not raw:
+            return self._send_json({"error": "No file received."}, 400)
+        try:
+            result = opml_from_upload(raw, self.headers.get("Content-Type", ""))
+            return self._send_json(result)
+        except zipfile.BadZipFile:
+            return self._send_json({"error": "That zip file appears to be corrupt."}, 400)
+        except ET.ParseError as e:
+            return self._send_json({"error": "Invalid OPML/XML: %s" % e}, 400)
+        except ValueError as e:
+            return self._send_json({"error": str(e)}, 400)
+        except Exception as e:
+            return self._send_json({"error": "%s: %s" % (type(e).__name__, e)}, 500)
 
     # -- static ------------------------------------------------------------
     def serve_static(self, path):

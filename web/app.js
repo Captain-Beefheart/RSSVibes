@@ -537,7 +537,10 @@ function settingsDialog() {
        <div class="hint">0 = manual refresh only</div></div>
      <div class="field"><label>Backup</label>
        <div style="display:flex;gap:8px"><button class="btn" id="setExport">Export JSON</button>
-       <button class="btn" id="setImport">Import JSON</button></div></div>`,
+       <button class="btn" id="setImport">Import JSON</button></div></div>
+     <div class="field"><label>Import subscriptions</label>
+       <div style="display:flex;gap:8px"><button class="btn" id="setImportOpml">Import Netvibes / OPML…</button></div>
+       <div class="hint">A Netvibes export (.zip or .opml) or any OPML file from another reader — your feeds are added as new pages.</div></div>`,
     `<button class="btn ghost" id="mCancel">Close</button>`);
 
   // accent swatches
@@ -561,6 +564,7 @@ function settingsDialog() {
   $("#mCancel", m).onclick = closeModal;
   $("#setExport", m).onclick = exportState;
   $("#setImport", m).onclick = importState;
+  $("#setImportOpml", m).onclick = importOpml;
 }
 
 function exportState() {
@@ -582,6 +586,68 @@ function importState() {
     r.readAsText(f);
   };
   inp.click();
+}
+
+/* -------- import Netvibes / OPML subscriptions */
+function importOpml() {
+  const inp = document.createElement("input");
+  inp.type = "file";
+  inp.accept = ".opml,.xml,.zip,application/xml,text/xml,application/zip";
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    toast("Importing subscriptions…");
+    try {
+      const buf = await f.arrayBuffer();
+      const r = await fetch("/api/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: buf,
+      });
+      const data = await r.json();
+      if (data.error) return toast(data.error, true);
+      applyOpmlImport(data);
+    } catch (e) {
+      toast("Import failed: " + e.message, true);
+    }
+  };
+  inp.click();
+}
+
+function applyOpmlImport(data) {
+  const pages = (data.pages || []).filter(p => p.feeds && p.feeds.length);
+  if (!pages.length) return toast("No feeds found in that file", true);
+
+  // Widen the global column count to fit the imported layout (capped at 5).
+  let maxCols = state.settings.columns || 3;
+  pages.forEach(p => { if (p.columns) maxCols = Math.max(maxCols, p.columns); });
+  state.settings.columns = Math.min(5, Math.max(1, maxCols));
+
+  let firstNewTab = null;
+  pages.forEach(p => {
+    const cols = p.columns || state.settings.columns;
+    const widgets = p.feeds.map(f => {
+      let host = "";
+      try { host = new URL(f.htmlUrl || f.url).hostname.replace(/^www\./, ""); } catch (e) {}
+      return {
+        id: uid(), type: "feed",
+        col: Math.max(0, Math.min((f.col || 1) - 1, cols - 1)),
+        title: f.title || host || "Feed",
+        url: f.url, max: 12, thumbs: true, read: {},
+      };
+    });
+    const tab = { id: uid(), name: p.name || "Imported", widgets };
+    state.tabs.push(tab);
+    if (!firstNewTab) firstNewTab = tab.id;
+  });
+
+  if (firstNewTab) state.activeTabId = firstNewTab;
+  closeModal();
+  applyTheme(); renderTabs(); renderBoard(); persist();
+
+  const n = data.feedCount, pg = pages.length;
+  let msg = `Imported ${n} feed${n === 1 ? "" : "s"} across ${pg} page${pg === 1 ? "" : "s"}`;
+  if (data.skipped) msg += ` · skipped ${data.skipped} non-RSS widget${data.skipped === 1 ? "" : "s"}`;
+  toast(msg);
 }
 
 /* ---------------------------------------------------------------- refresh loop */

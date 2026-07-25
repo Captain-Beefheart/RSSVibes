@@ -42,6 +42,18 @@ which is what makes the feeds actually load. It also:
 | New page | **＋** next to the tabs (double-click a tab to rename) |
 | Theme / accent / columns | **⚙** in the top-right |
 | Read an article | Click an item → reading pane slides in |
+| Import subscriptions | **⚙ → Import Netvibes / OPML** — a Netvibes `.zip`/`.opml` export or any OPML file |
+
+## Importing from Netvibes (or any OPML)
+
+Migrating from Netvibes? Export your subscriptions (Netvibes gives you a `.zip`
+containing an OPML file), then open **⚙ Settings → Import Netvibes / OPML** and pick the
+file. RSSVibes reads the zip directly — no need to unpack it — and recreates each Netvibes
+**tab as a page**, preserving the column and row layout of every feed. Netvibes-specific
+widgets that aren't RSS feeds (saved searches, etc.) are skipped, and imported feeds are
+**added** as new pages so your existing dashboard is left intact.
+
+Plain OPML exports from Feedly, Inoreader, The Old Reader and similar readers work too.
 
 ## Files
 
