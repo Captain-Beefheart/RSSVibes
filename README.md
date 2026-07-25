@@ -14,7 +14,11 @@ weather data you choose to load).
 
 ## Run it
 
-Double-click **`start.bat`**, or from a terminal:
+**As a desktop app** (Windows) — double-click **`RSSVibes.vbs`**. It starts the server and
+opens RSSVibes in its own chromeless window (Edge/Chrome "app mode"), then shuts the server
+down when you close the window. No console, no browser tabs — it feels like a native app.
+
+**In your browser** — double-click **`start.bat`**, or from a terminal:
 
 ```bash
 "C:\msys64\mingw64\bin\python.exe" server.py
@@ -24,6 +28,8 @@ Then open <http://127.0.0.1:8787/>. `start.bat` opens it for you.
 
 Requires only Python 3 (uses the standard library — no `pip install`). It's wired to the
 Python that ships with your MSYS2 install; any Python 3.8+ works if you'd rather use another.
+The desktop-app launcher additionally needs Edge or Chrome installed (it falls back to your
+default browser otherwise).
 
 ## Why a local server (and not just an HTML file)
 
@@ -46,6 +52,7 @@ which is what makes the feeds actually load. It also:
 | New page | **＋** next to the tabs (double-click a tab to rename) |
 | Theme / accent / columns | **⚙** in the top-right |
 | Read an article | Click an item → reading pane slides in |
+| River of News | **≋ River** in the top bar — every feed merged into one chronological stream |
 | Import subscriptions | **⚙ → Import Netvibes / OPML** — a Netvibes `.zip`/`.opml` export or any OPML file |
 | Export subscriptions | **⚙ → Export Netvibes / OPML** — save your feeds as a Netvibes-compatible OPML file |
 
@@ -69,10 +76,13 @@ Plain OPML exports from Feedly, Inoreader, The Old Reader and similar readers wo
 ## Files
 
 ```
-server.py        local server: static files + feed proxy + state storage
+server.py        local server: static files + feed proxy + weather + OPML + state
 web/index.html   app shell
 web/styles.css   theme (light/dark + accent colors)
-web/app.js       dashboard logic (state, drag-drop, feeds, reader, modals)
+web/app.js       dashboard logic (state, drag-drop, feeds, reader, river, modals)
+RSSVibes.vbs     desktop-app launcher (double-click) — opens an app-mode window
+rssvibes.ps1     launcher script it runs (server lifecycle + app window)
+start.bat        browser-tab launcher
 data/state.json  your saved dashboard (created on first run)
 ```
 
@@ -85,6 +95,13 @@ data/state.json  your saved dashboard (created on first run)
 - Bookmark favicons load from Google's public favicon service; everything else is local.
 
 ## Changelog
+
+### Unreleased
+
+- **River of News** — a new **≋ River** view that merges every feed across all pages into
+  one reverse-chronological stream; click any item to read it, closes back to the dashboard.
+- **Desktop app** — `RSSVibes.vbs` launches RSSVibes in a chromeless app-mode window and
+  ties the local server's lifetime to that window (no console, no browser tabs).
 
 ### v0.2.0
 
