@@ -193,9 +193,9 @@ function makeWidget(w) {
   const head = $(".widget-head", el);
   $(".act-remove", el).onclick = () => removeWidget(w);
   $(".act-collapse", el).onclick = () => { w.collapsed = !w.collapsed; el.classList.toggle("collapsed"); persist(); };
-  $(".act-refresh", el).onclick = () => { if (w.type === "feed") fetchFeed(w, true); else if (w.type === "clock") {} };
+  $(".act-refresh", el).onclick = () => { if (w.type === "feed") fetchFeed(w, true); else if (w.type === "weather") fetchWeather(w, true); };
   $(".act-config", el).onclick = () => configWidget(w);
-  if (w.type !== "feed") $(".act-refresh", el).style.display = "none";
+  if (w.type !== "feed" && w.type !== "weather") $(".act-refresh", el).style.display = "none";
 
   // drag: only arm from the header, so body interactions (text select, links) stay clean
   head.addEventListener("mousedown", (e) => { if (!e.target.closest(".wbtn")) el.draggable = true; });
@@ -213,6 +213,7 @@ function makeWidget(w) {
 function renderWidgetBody(w, el, body) {
   body.innerHTML = "";
   if (w.type === "feed")       renderFeed(w, el, body);
+  else if (w.type === "weather") renderWeather(w, el, body);
   else if (w.type === "notes") renderNotes(w, body);
   else if (w.type === "clock") renderClock(w, body);
   else if (w.type === "bookmarks") renderBookmarks(w, body);
@@ -332,6 +333,66 @@ function renderBookmarks(w, body) {
     refreshWidgetDom(w); persist();
   };
   body.appendChild(list); body.appendChild(add);
+}
+
+/* -------- weather widget */
+const weatherCache = {};
+const wxKey = w => (w.location || "").toLowerCase() + "|" + (w.units || "metric");
+
+function renderWeather(w, el, body) {
+  $(".widget-count", el).classList.add("zero");
+  if (!w.location) {
+    body.innerHTML = `<div class="wx-empty"><div class="wx-empty-ico">📍</div>
+      <p>No location set yet.</p><button class="btn" id="wxSet">Set location</button></div>`;
+    $("#wxSet", body).onclick = () => configWidget(w);
+    return;
+  }
+  const data = weatherCache[wxKey(w)];
+  if (!data || data.loading) {
+    body.innerHTML = `<div class="feed-loading"><span class="spinner"></span>Loading weather…</div>`;
+    if (!data) fetchWeather(w);
+    return;
+  }
+  if (data.error) {
+    body.innerHTML = `<div class="feed-error">⚠ ${esc(data.error)}</div>
+      <div style="text-align:center;padding:0 0 14px"><button class="btn" id="wxSet">Change location</button></div>`;
+    $("#wxSet", body).onclick = () => configWidget(w);
+    return;
+  }
+  const c = data.current, u = data.units;
+  const days = (data.daily || []).slice(0, 4).map(d => {
+    const dow = new Date(d.date + "T00:00").toLocaleDateString([], { weekday: "short" });
+    return `<div class="wx-day"><span class="wx-dow">${esc(dow)}</span>
+      <span class="wx-dico">${d.icon}</span>
+      <span class="wx-hilo"><b>${Math.round(d.tmax)}°</b> <span>${Math.round(d.tmin)}°</span></span></div>`;
+  }).join("");
+  body.innerHTML = `
+    <div class="wx-cur">
+      <div class="wx-ico">${c.icon}</div>
+      <div class="wx-now"><div class="wx-temp">${Math.round(c.temp)}<span class="wx-unit">${esc(u.temp)}</span></div></div>
+      <div class="wx-meta">
+        <div class="wx-place" title="${esc(data.location)}">${esc(data.location)}</div>
+        <div class="wx-desc">${esc(c.desc)} · feels ${Math.round(c.feels)}°</div>
+        <div class="wx-sub">💧 ${c.humidity}%&nbsp;&nbsp;·&nbsp;&nbsp;🌬️ ${Math.round(c.wind)} ${esc(u.wind)}</div>
+      </div>
+    </div>
+    <div class="wx-days">${days}</div>`;
+}
+
+async function fetchWeather(w, force) {
+  const key = wxKey(w);
+  if (!w.location) return;
+  weatherCache[key] = { loading: true };
+  refreshWidgetDom(w);
+  try {
+    const q = new URLSearchParams({ location: w.location, units: w.units || "metric" });
+    const r = await fetch("/api/weather?" + q.toString() + (force ? "&_=" + Date.now() : ""));
+    const j = await r.json();
+    weatherCache[key] = j.error ? { error: j.error } : j;
+  } catch (e) {
+    weatherCache[key] = { error: "Could not reach server" };
+  }
+  refreshWidgetDom(w);
 }
 
 /* refresh a single widget's DOM in place */
@@ -463,6 +524,7 @@ function addFeedDialog() {
 function addWidgetDialog() {
   const types = [
     { t: "feed", ico: "📰", label: "RSS Feed" },
+    { t: "weather", ico: "⛅", label: "Weather" },
     { t: "notes", ico: "📝", label: "Notes" },
     { t: "clock", ico: "🕑", label: "Clock" },
     { t: "bookmarks", ico: "🔖", label: "Bookmarks" },
@@ -480,8 +542,10 @@ function addWidgetDialog() {
     if (t === "notes") Object.assign(base, { title: "Notes", text: "" });
     if (t === "clock") Object.assign(base, { title: "Clock", fmt24: false });
     if (t === "bookmarks") Object.assign(base, { title: "Bookmarks", links: [] });
+    if (t === "weather") Object.assign(base, { title: "Weather", location: "", units: "metric" });
     tab.widgets.push(base);
     renderBoard(); persist();
+    if (t === "weather") configWidget(base);   // prompt for a location right away
   });
 }
 
@@ -499,12 +563,26 @@ function configWidget(w) {
     bodyHTML += `<label style="display:flex;gap:8px;align-items:center;font-weight:600;color:var(--ink-soft)">
       <input type="checkbox" id="cfg24" ${w.fmt24 ? "checked" : ""}> 24-hour time</label>`;
   }
+  if (w.type === "weather") {
+    bodyHTML += `<div class="field"><label>Location</label>
+        <input type="text" id="cfgLoc" value="${esc(w.location || "")}" placeholder="City name, e.g. London or Tokyo" autocomplete="off"></div>
+      <div class="field"><label>Units</label>
+        <div class="seg" id="cfgUnits">
+          <button data-v="metric" class="${(w.units || "metric") === "metric" ? "active" : ""}">°C</button>
+          <button data-v="imperial" class="${w.units === "imperial" ? "active" : ""}">°F</button>
+        </div></div>`;
+  }
   const m = modal("Widget settings", bodyHTML,
     `<button class="btn ghost" id="mDel">Remove</button><div style="flex:1"></div>
      <button class="btn ghost" id="mCancel">Cancel</button><button class="btn primary" id="mSave">Save</button>`);
   $("#mCancel", m).onclick = closeModal;
   $("#mDel", m).onclick = () => { closeModal(); removeWidget(w); };
   const maxR = $("#cfgMax", m); if (maxR) maxR.oninput = () => $("#cfgMaxVal", m).textContent = maxR.value;
+  if ($("#cfgUnits", m)) $$("#cfgUnits button", m).forEach(b => b.onclick = () => {
+    $$("#cfgUnits button", m).forEach(x => x.classList.remove("active")); b.classList.add("active");
+  });
+  const locInput = $("#cfgLoc", m);
+  if (locInput) { locInput.focus(); locInput.addEventListener("keydown", e => { if (e.key === "Enter") $("#mSave", m).click(); }); }
   $("#mSave", m).onclick = () => {
     w.title = $("#cfgTitle", m).value.trim() || w.title;
     if (w.type === "feed") {
@@ -516,6 +594,13 @@ function configWidget(w) {
       if (changed) { delete feedCache[w.url]; fetchFeed(w, true); }
     }
     if (w.type === "clock") w.fmt24 = $("#cfg24", m).checked;
+    if (w.type === "weather") {
+      const loc = $("#cfgLoc", m).value.trim();
+      const units = $("#cfgUnits button.active", m)?.dataset.v || w.units || "metric";
+      const changed = loc !== w.location || units !== w.units;
+      w.location = loc; w.units = units;
+      if (changed && loc) fetchWeather(w, true);
+    }
     closeModal(); renderBoard(); persist();
   };
 }
@@ -687,9 +772,15 @@ function scheduleRefresh() {
   refreshTimer = setInterval(refreshAllFeeds, mins * 60 * 1000);
 }
 function refreshAllFeeds() {
-  state.tabs.forEach(t => t.widgets.forEach(w => { if (w.type === "feed") { delete feedCache[w.url]; } }));
-  activeTab().widgets.forEach(w => { if (w.type === "feed") fetchFeed(w, true); });
-  toast("Refreshing feeds…");
+  state.tabs.forEach(t => t.widgets.forEach(w => {
+    if (w.type === "feed") delete feedCache[w.url];
+    else if (w.type === "weather") delete weatherCache[wxKey(w)];
+  }));
+  activeTab().widgets.forEach(w => {
+    if (w.type === "feed") fetchFeed(w, true);
+    else if (w.type === "weather" && w.location) fetchWeather(w, true);
+  });
+  toast("Refreshing…");
 }
 
 /* ---------------------------------------------------------------- boot */

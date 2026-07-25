@@ -2,8 +2,9 @@
 
 A personal, **Netvibes- and DashDork-inspired** RSS reader / start page that runs
 entirely on your own machine. Tabbed pages, a drag-and-drop grid of widgets, RSS/Atom
-feed portlets, notes, a clock and bookmarks — all saved locally to `data/state.json`.
-No account, no cloud, no external services (except the feeds you choose to follow).
+feed portlets, a weather widget, notes, a clock and bookmarks — all saved locally to
+`data/state.json`. No account, no cloud, no external services (except the feeds and
+weather data you choose to load).
 
 ![Made with Python stdlib](https://img.shields.io/badge/backend-Python%20stdlib-3776ab)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-2fa84f)
@@ -37,7 +38,8 @@ which is what makes the feeds actually load. It also:
 | Action | How |
 | --- | --- |
 | Add a feed | **＋ Feed** — paste a feed URL *or* a site homepage |
-| Add a widget | **＋ Widget** — Feed, Notes, Clock or Bookmarks |
+| Add a widget | **＋ Widget** — Feed, Weather, Notes, Clock or Bookmarks |
+| Weather | Add a **Weather** widget, then set a city — current conditions + 4-day forecast |
 | Rearrange | Drag a widget by its **header** between columns |
 | New page | **＋** next to the tabs (double-click a tab to rename) |
 | Theme / accent / columns | **⚙** in the top-right |
@@ -76,4 +78,6 @@ data/state.json  your saved dashboard (created on first run)
 
 - The server binds to `127.0.0.1` only — it is not reachable from other machines.
 - Change the port with an env var: `PORT=9000 python server.py`.
+- The weather widget uses the free [Open-Meteo](https://open-meteo.com/) API — no key
+  required; it geocodes the city name you type and caches results for 10 minutes.
 - Bookmark favicons load from Google's public favicon service; everything else is local.

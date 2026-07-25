@@ -55,10 +55,10 @@ _cache = {}
 _cache_lock = threading.Lock()
 
 
-def cache_get(key):
+def cache_get(key, ttl=CACHE_TTL):
     with _cache_lock:
         hit = _cache.get(key)
-        if hit and (time.time() - hit[0]) < CACHE_TTL:
+        if hit and (time.time() - hit[0]) < ttl:
             return hit[1]
     return None
 
@@ -382,6 +382,90 @@ def discover_feed(url):
 
 
 # ---------------------------------------------------------------------------
+# Weather (Open-Meteo — free, no API key, includes geocoding).
+# ---------------------------------------------------------------------------
+WMO = {
+    0: ("Clear sky", "☀️"),
+    1: ("Mainly clear", "🌤️"), 2: ("Partly cloudy", "⛅"), 3: ("Overcast", "☁️"),
+    45: ("Fog", "🌫️"), 48: ("Rime fog", "🌫️"),
+    51: ("Light drizzle", "🌦️"), 53: ("Drizzle", "🌦️"), 55: ("Heavy drizzle", "🌦️"),
+    56: ("Freezing drizzle", "🌧️"), 57: ("Freezing drizzle", "🌧️"),
+    61: ("Light rain", "🌦️"), 63: ("Rain", "🌧️"), 65: ("Heavy rain", "🌧️"),
+    66: ("Freezing rain", "🌧️"), 67: ("Freezing rain", "🌧️"),
+    71: ("Light snow", "🌨️"), 73: ("Snow", "🌨️"), 75: ("Heavy snow", "❄️"), 77: ("Snow grains", "🌨️"),
+    80: ("Light showers", "🌦️"), 81: ("Showers", "🌧️"), 82: ("Violent showers", "⛈️"),
+    85: ("Snow showers", "🌨️"), 86: ("Snow showers", "🌨️"),
+    95: ("Thunderstorm", "⛈️"), 96: ("Thunderstorm, hail", "⛈️"), 99: ("Thunderstorm, hail", "⛈️"),
+}
+
+
+def _wmo(code):
+    try:
+        return WMO.get(int(code), ("—", "🌡️"))
+    except (TypeError, ValueError):
+        return ("—", "🌡️")
+
+
+def fetch_weather(location="", lat="", lon="", units="metric"):
+    place = location
+    if not (lat and lon):
+        if not location:
+            raise ValueError("Enter a location.")
+        geo_url = "https://geocoding-api.open-meteo.com/v1/search?" + urllib.parse.urlencode(
+            {"name": location, "count": 1, "language": "en", "format": "json"})
+        _, ctype, raw = http_get(geo_url, timeout=10)
+        results = (json.loads(decode_bytes(raw, ctype)) or {}).get("results") or []
+        if not results:
+            raise ValueError("Location not found: %s" % location)
+        g = results[0]
+        lat, lon = g["latitude"], g["longitude"]
+        parts = [g.get("name")]
+        if g.get("admin1") and g.get("admin1") != g.get("name"):
+            parts.append(g.get("admin1"))
+        if g.get("country"):
+            parts.append(g.get("country"))
+        place = ", ".join(p for p in parts if p)
+
+    params = {
+        "latitude": lat, "longitude": lon,
+        "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m",
+        "daily": "weather_code,temperature_2m_max,temperature_2m_min",
+        "timezone": "auto", "forecast_days": 4,
+    }
+    if units == "imperial":
+        params["temperature_unit"] = "fahrenheit"
+        params["wind_speed_unit"] = "mph"
+    _, ctype, raw = http_get("https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode(params), timeout=10)
+    data = json.loads(decode_bytes(raw, ctype))
+
+    cur = data.get("current") or {}
+    cunits = data.get("current_units") or {}
+    desc, icon = _wmo(cur.get("weather_code"))
+
+    d = data.get("daily") or {}
+    dates = d.get("time") or []
+    codes = d.get("weather_code") or []
+    tmax = d.get("temperature_2m_max") or []
+    tmin = d.get("temperature_2m_min") or []
+    daily = []
+    for i, dt in enumerate(dates):
+        ddesc, dicon = _wmo(codes[i] if i < len(codes) else None)
+        daily.append({"date": dt, "desc": ddesc, "icon": dicon,
+                      "tmax": tmax[i] if i < len(tmax) else None,
+                      "tmin": tmin[i] if i < len(tmin) else None})
+
+    return {
+        "location": place, "lat": lat, "lon": lon,
+        "current": {"temp": cur.get("temperature_2m"), "feels": cur.get("apparent_temperature"),
+                    "desc": desc, "icon": icon,
+                    "humidity": cur.get("relative_humidity_2m"), "wind": cur.get("wind_speed_10m")},
+        "daily": daily,
+        "units": {"temp": cunits.get("temperature_2m") or ("°F" if units == "imperial" else "°C"),
+                  "wind": cunits.get("wind_speed_10m") or ("mph" if units == "imperial" else "km/h")},
+    }
+
+
+# ---------------------------------------------------------------------------
 # OPML import (Netvibes exports + any standard OPML from other readers).
 #
 # Netvibes shape: <body> holds one <outline> per tab (with cols/layout attrs);
@@ -633,6 +717,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_feed(qs)
         if path == "/api/discover":
             return self.api_discover(qs)
+        if path == "/api/weather":
+            return self.api_weather(qs)
         if path == "/api/state":
             return self.api_state_get()
         return self.serve_static(path)
@@ -702,6 +788,30 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 continue
         return self._send_json({"error": "No feed found at that URL"}, 404)
+
+    def api_weather(self, qs):
+        location = (qs.get("location") or [""])[0].strip()
+        units = (qs.get("units") or ["metric"])[0]
+        lat = (qs.get("lat") or [""])[0].strip()
+        lon = (qs.get("lon") or [""])[0].strip()
+        if not location and not (lat and lon):
+            return self._send_json({"error": "Enter a location."}, 400)
+        key = "wx:%s:%s:%s:%s" % (location.lower(), lat, lon, units)
+        cached = cache_get(key, 600)  # weather changes slowly; cache 10 min
+        if cached is not None:
+            return self._send_json(cached)
+        try:
+            result = fetch_weather(location, lat, lon, units)
+            cache_put(key, result)
+            return self._send_json(result)
+        except ValueError as e:
+            return self._send_json({"error": str(e)}, 400)
+        except urllib.error.HTTPError as e:
+            return self._send_json({"error": "Weather service returned HTTP %s" % e.code}, 502)
+        except (urllib.error.URLError, socket.timeout) as e:
+            return self._send_json({"error": str(getattr(e, "reason", e))}, 502)
+        except Exception as e:
+            return self._send_json({"error": "%s: %s" % (type(e).__name__, e)}, 502)
 
     def api_state_get(self):
         state = load_state()

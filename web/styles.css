@@ -253,6 +253,28 @@ body {
 .bm-fav { width: 16px; height: 16px; border-radius: 4px; }
 .bm-add { margin: 6px; }
 
+/* -------- weather widget */
+.wx-cur { display: flex; align-items: center; gap: 14px; padding: 16px 16px 12px; }
+.wx-ico { font-size: 46px; line-height: 1; flex: none; }
+.wx-now { flex: none; }
+.wx-temp { font-size: 38px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1; }
+.wx-unit { font-size: 17px; font-weight: 700; color: var(--ink-soft); margin-left: 1px; }
+.wx-meta { margin-left: auto; text-align: right; min-width: 0; }
+.wx-place { font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wx-desc { color: var(--ink-soft); font-size: 13px; margin-top: 2px; }
+.wx-sub { color: var(--ink-faint); font-size: 12px; margin-top: 4px; white-space: nowrap; }
+.wx-days { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; border-top: 1px solid var(--line); padding: 10px 8px 14px; }
+.wx-day { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 2px; border-radius: 8px; }
+.wx-day:hover { background: var(--panel-2); }
+.wx-dow { font-size: 12px; color: var(--ink-faint); font-weight: 600; }
+.wx-dico { font-size: 22px; }
+.wx-hilo { font-size: 13px; font-variant-numeric: tabular-nums; }
+.wx-hilo b { color: var(--ink); font-weight: 700; }
+.wx-hilo span { color: var(--ink-faint); }
+.wx-empty { text-align: center; padding: 26px 16px; color: var(--ink-faint); }
+.wx-empty-ico { font-size: 30px; margin-bottom: 8px; }
+.wx-empty p { margin: 0 0 12px; }
+
 /* -------------------------------------------------- reader pane */
 .reader {
   position: fixed; top: 0; right: 0; z-index: 50;
