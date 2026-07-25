@@ -38,6 +38,7 @@ function defaultState() {
 
 let state = defaultState();
 const feedCache = {};          // url -> { items, title, error, loading, fetched }
+let riverOpen = false;         // River-of-News view active?
 
 /* ---------------------------------------------------------------- helpers */
 const activeTab = () => state.tabs.find(t => t.id === state.activeTabId) || state.tabs[0];
@@ -113,7 +114,7 @@ function renderTabs() {
     el.className = "tab" + (t.id === state.activeTabId ? " active" : "");
     el.innerHTML = `<span class="tab-label">${esc(t.name)}</span>` +
       (state.tabs.length > 1 ? `<span class="tab-close" title="Delete page">✕</span>` : "");
-    el.querySelector(".tab-label").onclick = () => { state.activeTabId = t.id; renderTabs(); renderBoard(); persist(); };
+    el.querySelector(".tab-label").onclick = () => { if (riverOpen) closeRiver(); state.activeTabId = t.id; renderTabs(); renderBoard(); persist(); };
     el.querySelector(".tab-label").ondblclick = () => renameTab(t);
     const close = el.querySelector(".tab-close");
     if (close) close.onclick = (e) => { e.stopPropagation(); deleteTab(t); };
@@ -783,6 +784,79 @@ function refreshAllFeeds() {
   toast("Refreshing…");
 }
 
+/* ---------------------------------------------------------------- river of news */
+const allFeedWidgets = () => state.tabs.flatMap(t => t.widgets.filter(w => w.type === "feed" && w.url));
+
+function openRiver() {
+  riverOpen = true;
+  $("#board").hidden = true;
+  $("#river").hidden = false;
+  $("#riverBtn").classList.add("active");
+  renderRiver();
+}
+function closeRiver() {
+  riverOpen = false;
+  $("#river").hidden = true;
+  $("#board").hidden = false;
+  $("#riverBtn").classList.remove("active");
+}
+
+async function renderRiver() {
+  const feeds = allFeedWidgets();
+  const body = $("#riverBody");
+  if (!feeds.length) {
+    $("#riverSub").textContent = "";
+    body.innerHTML = `<div class="feed-empty" style="padding:44px">No feeds yet — add a feed, then open the river.</div>`;
+    return;
+  }
+  body.innerHTML = `<div class="feed-loading"><span class="spinner"></span>Gathering ${feeds.length} feed${feeds.length === 1 ? "" : "s"}…</div>`;
+  // fetch any feeds not already loaded (server-cached, browser-throttled)
+  await Promise.all(feeds.map(w => (feedCache[w.url] && feedCache[w.url].items) ? null : fetchFeed(w).catch(() => {})));
+  if (!riverOpen) return; // user closed it while loading
+  buildRiver(feeds);
+}
+
+function buildRiver(feeds) {
+  const seen = new Set();
+  const items = [];
+  feeds.forEach(w => {
+    const data = feedCache[w.url];
+    if (!data || data.error || !data.items) return;
+    data.items.forEach(it => {
+      const key = it.link || it.id || it.title;
+      if (seen.has(key)) return;
+      seen.add(key);
+      items.push({ it, w });
+    });
+  });
+  items.sort((a, b) => (b.it.ts || 0) - (a.it.ts || 0));
+  const shown = items.slice(0, 250);
+  const loaded = feeds.filter(w => feedCache[w.url] && feedCache[w.url].items).length;
+  $("#riverSub").textContent = `· ${shown.length} of ${items.length} items from ${loaded} feed${loaded === 1 ? "" : "s"}`;
+
+  const body = $("#riverBody");
+  if (!shown.length) { body.innerHTML = `<div class="feed-empty" style="padding:44px">No items found.</div>`; return; }
+  const frag = document.createDocumentFragment();
+  shown.forEach(({ it, w }) => {
+    const row = document.createElement("div");
+    row.className = "river-item" + (w.read[it.id] ? " read" : "");
+    const thumb = it.thumb ? `<img class="ri-thumb" src="${esc(it.thumb)}" loading="lazy" onerror="this.remove()">` : "";
+    row.innerHTML = `${thumb}<div class="ri-main">
+        <div class="ri-src"><span class="ri-dot"></span>${esc(w.title)} · <span class="ri-time">${esc(timeAgo(it.ts))}</span></div>
+        <div class="ri-title">${esc(it.title)}</div>
+      </div>`;
+    row.onclick = () => { markRead(w, it); row.classList.add("read"); openReader(it, w); };
+    frag.appendChild(row);
+  });
+  body.innerHTML = "";
+  body.appendChild(frag);
+}
+
+async function refreshRiver() {
+  allFeedWidgets().forEach(w => delete feedCache[w.url]);
+  await renderRiver();
+}
+
 /* ---------------------------------------------------------------- boot */
 function boot() { applyTheme(); renderTabs(); renderBoard(); scheduleRefresh(); }
 
@@ -793,9 +867,17 @@ async function init() {
   $("#addFeedBtn").onclick = addFeedDialog;
   $("#refreshAllBtn").onclick = refreshAllFeeds;
   $("#settingsBtn").onclick = settingsDialog;
+  $("#riverBtn").onclick = () => riverOpen ? closeRiver() : openRiver();
+  $("#riverClose").onclick = closeRiver;
+  $("#riverRefresh").onclick = refreshRiver;
   $("#readerClose").onclick = closeReader;
   $("#scrim").onclick = closeReader;
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { closeReader(); closeModal(); } });
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    if (!$("#reader").hidden) return closeReader();
+    if (!$("#modalWrap").hidden) return closeModal();
+    if (riverOpen) return closeRiver();
+  });
 
   let resizeT = null;
   window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(renderBoard, 150); });

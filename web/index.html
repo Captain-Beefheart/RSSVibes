@@ -20,6 +20,7 @@
 
     <div class="topbar-spacer"></div>
 
+    <button class="btn" id="riverBtn" title="River of News — every feed in one stream">≋ River</button>
     <button class="btn" id="addWidgetBtn" title="Add a widget">＋ Widget</button>
     <button class="btn" id="addFeedBtn" title="Add an RSS feed">＋ Feed</button>
     <button class="btn icon" id="refreshAllBtn" title="Refresh all feeds">⟳</button>
@@ -28,6 +29,18 @@
 
   <!-- Dashboard columns -->
   <main class="board" id="board"></main>
+
+  <!-- River of News: every feed merged into one chronological stream -->
+  <section class="river" id="river" hidden>
+    <div class="river-head">
+      <div class="river-title">≋ River of News <span class="river-sub" id="riverSub"></span></div>
+      <div class="river-actions">
+        <button class="btn icon" id="riverRefresh" title="Refresh all feeds">⟳</button>
+        <button class="btn" id="riverClose">✕ Close</button>
+      </div>
+    </div>
+    <div class="river-body" id="riverBody"></div>
+  </section>
 
   <!-- Reader pane (article view) -->
   <aside class="reader" id="reader" hidden>
