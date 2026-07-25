@@ -52,14 +52,34 @@ function effectiveColumns() {
 }
 
 let saveTimer = null;
+let dirty = false;                 // unsaved changes pending?
+
+// Debounced background save for routine edits (drag, typing a note, …).
 function persist() {
+  dirty = true;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    try {
-      await fetch("/api/state", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(state) });
-    } catch (e) { /* offline is fine; localStorage mirror below */ }
-    try { localStorage.setItem("dashState", JSON.stringify(state)); } catch (e) {}
-  }, 500);
+  saveTimer = setTimeout(() => { saveNow().catch(() => {}); }, 500);
+}
+
+// Write the whole dashboard to data/state.json right now (awaitable). Use for
+// changes we must not lose to the debounce — e.g. an OPML/feed import.
+async function saveNow() {
+  clearTimeout(saveTimer);
+  const body = JSON.stringify(state);
+  try { localStorage.setItem("dashState", body); } catch (e) {}
+  const r = await fetch("/api/state", { method: "PUT", headers: { "Content-Type": "application/json" }, body });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  dirty = false;
+}
+
+// On tab-hide / window-close, flush any pending change reliably via a beacon —
+// this survives the desktop-app window closing (which stops the server moments
+// later) so nothing edited right before closing is lost.
+function flushBeacon() {
+  if (!dirty) return;
+  const body = JSON.stringify(state);
+  try { localStorage.setItem("dashState", body); } catch (e) {}
+  if (navigator.sendBeacon) navigator.sendBeacon("/api/state", new Blob([body], { type: "application/json" }));
 }
 
 function timeAgo(ts) {
@@ -707,8 +727,10 @@ function importState() {
     const f = inp.files[0]; if (!f) return;
     const r = new FileReader();
     r.onload = () => {
-      try { state = JSON.parse(r.result); closeModal(); boot(); toast("Dashboard imported"); persist(); }
-      catch (e) { toast("Invalid JSON file", true); }
+      try {
+        state = JSON.parse(r.result); closeModal(); boot();
+        saveNow().then(() => toast("Dashboard imported")).catch(e => toast("Imported, but saving failed: " + e.message, true));
+      } catch (e) { toast("Invalid JSON file", true); }
     };
     r.readAsText(f);
   };
@@ -732,7 +754,7 @@ function importOpml() {
       });
       const data = await r.json();
       if (data.error) return toast(data.error, true);
-      applyOpmlImport(data);
+      await applyOpmlImport(data);
     } catch (e) {
       toast("Import failed: " + e.message, true);
     }
@@ -740,7 +762,7 @@ function importOpml() {
   inp.click();
 }
 
-function applyOpmlImport(data) {
+async function applyOpmlImport(data) {
   const pages = (data.pages || []).filter(p => p.feeds && p.feeds.length);
   if (!pages.length) return toast("No feeds found in that file", true);
 
@@ -764,12 +786,17 @@ function applyOpmlImport(data) {
 
   if (firstNewTab) state.activeTabId = firstNewTab;
   closeModal();
-  applyTheme(); renderTabs(); renderBoard(); persist();
+  applyTheme(); renderTabs(); renderBoard();
 
   const n = data.feedCount, pg = pages.length;
   let msg = `Imported ${n} feed${n === 1 ? "" : "s"} across ${pg} page${pg === 1 ? "" : "s"}`;
   if (data.skipped) msg += ` · skipped ${data.skipped} non-RSS widget${data.skipped === 1 ? "" : "s"}`;
-  toast(msg);
+  try {
+    await saveNow();                 // write the import to data/state.json immediately
+    toast(msg + " · saved");
+  } catch (e) {
+    toast(msg + ` — but saving to disk failed: ${e.message}`, true);
+  }
 }
 
 /* ---------------------------------------------------------------- refresh loop */
@@ -891,6 +918,11 @@ async function init() {
 
   let resizeT = null;
   window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(renderBoard, 150); });
+
+  // Flush unsaved changes when the page is hidden or closed (covers the desktop
+  // app window closing, which stops the server right after).
+  window.addEventListener("pagehide", flushBeacon);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushBeacon(); });
 
   // Load persisted state (server first, then localStorage, then default seed)
   try {

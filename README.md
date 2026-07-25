@@ -64,7 +64,9 @@ containing an OPML file), then open **⚙ Settings → Import Netvibes / OPML** 
 file. RSSVibes reads the zip directly — no need to unpack it — and recreates each Netvibes
 **tab as a page**, preserving the column and row layout of every feed. Netvibes-specific
 widgets that aren't RSS feeds (saved searches, etc.) are skipped, and imported feeds are
-**added** as new pages so your existing dashboard is left intact.
+**added** as new pages so your existing dashboard is left intact. Imported feeds are written
+to `data/state.json` immediately (not on a delay), so they're all there the next time you
+open RSSVibes — even if you close the app right after importing.
 
 Going the other way, **⚙ Settings → Export Netvibes / OPML** writes your feeds back out as a
 Netvibes-compatible OPML file (pages become tabs, with per-feed column/row positions), so you
