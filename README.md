@@ -10,6 +10,8 @@ weather data you choose to load).
 ![No dependencies](https://img.shields.io/badge/dependencies-none-2fa84f)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
+![RSSVibes dashboard — RSS feeds, a weather widget, clock, notes and bookmarks in a drag-and-drop grid](docs/screenshot.png)
+
 ## Run it
 
 Double-click **`start.bat`**, or from a terminal:
