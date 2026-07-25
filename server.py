@@ -602,8 +602,12 @@ def build_opml(state):
                  if w.get("type") == "feed" and w.get("url")]
         if not feeds:
             continue  # OPML is feed-only; skip pages with no feeds
+        try:
+            tcols = max(1, min(5, int(tab.get("columns") or default_cols)))
+        except (TypeError, ValueError):
+            tcols = default_cols
         out.append('  <outline title=%s cols="%d" layout="%d-0">'
-                   % (quoteattr(str(tab.get("name") or "Imported")), default_cols, default_cols))
+                   % (quoteattr(str(tab.get("name") or "Imported")), tcols, tcols))
         rows = {}
         for w in feeds:
             try:

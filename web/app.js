@@ -18,7 +18,7 @@ function defaultState() {
     settings: { theme: "light", accent: "teal", columns: 3, refreshMins: 15, brand: "RSSVibes" },
     activeTabId: "home",
     tabs: [{
-      id: "home", name: "Home",
+      id: "home", name: "Home", columns: 3,
       widgets: [
         { id: uid(), type: "feed", col: 0, title: "Hacker News", url: "https://hnrss.org/frontpage", max: 12, thumbs: false, read: {} },
         { id: uid(), type: "feed", col: 0, title: "The Verge", url: "https://www.theverge.com/rss/index.xml", max: 10, thumbs: true, read: {} },
@@ -45,7 +45,8 @@ const activeTab = () => state.tabs.find(t => t.id === state.activeTabId) || stat
 const widgetsById = () => Object.fromEntries(activeTab().widgets.map(w => [w.id, w]));
 
 function effectiveColumns() {
-  const want = state.settings.columns || 3;
+  const t = activeTab();
+  const want = (t && t.columns) || 3;      // per-page column count
   const fit = Math.max(1, Math.floor(window.innerWidth / 320));
   return Math.min(want, fit);
 }
@@ -115,20 +116,36 @@ function renderTabs() {
     el.innerHTML = `<span class="tab-label">${esc(t.name)}</span>` +
       (state.tabs.length > 1 ? `<span class="tab-close" title="Delete page">✕</span>` : "");
     el.querySelector(".tab-label").onclick = () => { if (riverOpen) closeRiver(); state.activeTabId = t.id; renderTabs(); renderBoard(); persist(); };
-    el.querySelector(".tab-label").ondblclick = () => renameTab(t);
+    el.querySelector(".tab-label").ondblclick = () => pageSettingsDialog(t);
     const close = el.querySelector(".tab-close");
     if (close) close.onclick = (e) => { e.stopPropagation(); deleteTab(t); };
     wrap.appendChild(el);
   });
 }
 
-function renameTab(t) {
-  const name = prompt("Rename page:", t.name);
-  if (name && name.trim()) { t.name = name.trim(); renderTabs(); persist(); }
+function pageSettingsDialog(tab) {
+  // operate on the active, visible page so column changes preview live
+  if (state.activeTabId !== tab.id) { if (riverOpen) closeRiver(); state.activeTabId = tab.id; renderTabs(); renderBoard(); }
+  const cols = tab.columns || 3;
+  const m = modal("Page settings",
+    `<div class="field"><label>Page name</label>
+       <input type="text" id="pgName" value="${esc(tab.name)}" autocomplete="off"></div>
+     <div class="field"><label>Columns on this page: <span id="pgColsVal">${cols}</span></label>
+       <input type="range" id="pgCols" min="1" max="5" value="${cols}">
+       <div class="hint">Each page has its own column count.</div></div>`,
+    `<button class="btn ghost" id="pgDel"${state.tabs.length > 1 ? "" : " disabled"}>Delete page</button>
+     <div style="flex:1"></div><button class="btn primary" id="pgDone">Done</button>`);
+  const nameI = $("#pgName", m); nameI.focus(); nameI.select();
+  nameI.oninput = () => { tab.name = nameI.value; renderTabs(); persist(); };
+  const colsR = $("#pgCols", m);
+  colsR.oninput = () => { $("#pgColsVal", m).textContent = colsR.value; tab.columns = +colsR.value; renderBoard(); persist(); };
+  $("#pgDel", m).onclick = () => { closeModal(); deleteTab(tab); };
+  $("#pgDone", m).onclick = () => { if (!tab.name.trim()) { tab.name = "Page"; renderTabs(); persist(); } closeModal(); };
 }
 
 function addTab() {
-  const t = { id: uid(), name: "Page " + (state.tabs.length + 1), widgets: [] };
+  const cols = (activeTab() && activeTab().columns) || state.settings.columns || 3;
+  const t = { id: uid(), name: "Page " + (state.tabs.length + 1), columns: cols, widgets: [] };
   state.tabs.push(t);
   state.activeTabId = t.id;
   renderTabs(); renderBoard(); persist();
@@ -617,8 +634,6 @@ function settingsDialog() {
          <button data-v="dark" class="${s.theme === "dark" ? "active" : ""}">🌙 Dark</button>
        </div></div>
      <div class="field"><label>Accent</label><div class="swatches" id="setAccent"></div></div>
-     <div class="field"><label>Columns: <span id="setColsVal">${s.columns}</span></label>
-       <input type="range" id="setCols" min="1" max="5" value="${s.columns}"></div>
      <div class="field"><label>Auto-refresh feeds every: <span id="setRefVal">${s.refreshMins}</span> min</label>
        <input type="range" id="setRef" min="0" max="60" step="5" value="${s.refreshMins}">
        <div class="hint">0 = manual refresh only</div></div>
@@ -646,8 +661,6 @@ function settingsDialog() {
     s.theme = b.dataset.v; $$("#setTheme button", m).forEach(x => x.classList.remove("active")); b.classList.add("active"); applyTheme(); persist();
   });
   $("#setBrand", m).oninput = (e) => { s.brand = e.target.value; applyTheme(); persist(); };
-  const cols = $("#setCols", m);
-  cols.oninput = () => { $("#setColsVal", m).textContent = cols.value; s.columns = +cols.value; renderBoard(); persist(); };
   const ref = $("#setRef", m);
   ref.oninput = () => { $("#setRefVal", m).textContent = ref.value; s.refreshMins = +ref.value; scheduleRefresh(); persist(); };
   $("#mCancel", m).onclick = closeModal;
@@ -731,14 +744,9 @@ function applyOpmlImport(data) {
   const pages = (data.pages || []).filter(p => p.feeds && p.feeds.length);
   if (!pages.length) return toast("No feeds found in that file", true);
 
-  // Widen the global column count to fit the imported layout (capped at 5).
-  let maxCols = state.settings.columns || 3;
-  pages.forEach(p => { if (p.columns) maxCols = Math.max(maxCols, p.columns); });
-  state.settings.columns = Math.min(5, Math.max(1, maxCols));
-
   let firstNewTab = null;
   pages.forEach(p => {
-    const cols = p.columns || state.settings.columns;
+    const cols = Math.min(5, Math.max(1, p.columns || 3));   // each page keeps its own column count
     const widgets = p.feeds.map(f => {
       let host = "";
       try { host = new URL(f.htmlUrl || f.url).hostname.replace(/^www\./, ""); } catch (e) {}
@@ -749,7 +757,7 @@ function applyOpmlImport(data) {
         url: f.url, htmlUrl: f.htmlUrl || "", max: 12, thumbs: true, read: {},
       };
     });
-    const tab = { id: uid(), name: p.name || "Imported", widgets };
+    const tab = { id: uid(), name: p.name || "Imported", columns: cols, widgets };
     state.tabs.push(tab);
     if (!firstNewTab) firstNewTab = tab.id;
   });
@@ -900,6 +908,7 @@ async function init() {
   state.settings = Object.assign(defaultState().settings, state.settings || {});
   state.tabs = state.tabs && state.tabs.length ? state.tabs : defaultState().tabs;
   if (!state.tabs.find(t => t.id === state.activeTabId)) state.activeTabId = state.tabs[0].id;
+  state.tabs.forEach(t => { if (!t.columns) t.columns = state.settings.columns || 3; });  // migrate to per-page columns
   state.tabs.forEach(t => t.widgets.forEach(w => { if (w.type === "feed" && !w.read) w.read = {}; }));
 
   boot();

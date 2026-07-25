@@ -49,8 +49,9 @@ which is what makes the feeds actually load. It also:
 | Add a widget | **＋ Widget** — Feed, Weather, Notes, Clock or Bookmarks |
 | Weather | Add a **Weather** widget, then set a city — current conditions + 4-day forecast |
 | Rearrange | Drag a widget by its **header** between columns |
-| New page | **＋** next to the tabs (double-click a tab to rename) |
-| Theme / accent / columns | **⚙** in the top-right |
+| New page | **＋** next to the tabs |
+| Page settings | Double-click a tab — rename it or set its **column count** (1–5, per page) |
+| Theme & accent | **⚙** in the top-right |
 | Read an article | Click an item → reading pane slides in |
 | River of News | **≋ River** in the top bar — every feed merged into one chronological stream |
 | Import subscriptions | **⚙ → Import Netvibes / OPML** — a Netvibes `.zip`/`.opml` export or any OPML file |
@@ -102,6 +103,8 @@ data/state.json  your saved dashboard (created on first run)
   one reverse-chronological stream; click any item to read it, closes back to the dashboard.
 - **Desktop app** — `RSSVibes.vbs` launches RSSVibes in a chromeless app-mode window and
   ties the local server's lifetime to that window (no console, no browser tabs).
+- **Per-page column counts** — each page has its own column count (1–5); set it by
+  double-clicking a tab. OPML import and export preserve every page's column layout.
 
 ### v0.2.0
 
