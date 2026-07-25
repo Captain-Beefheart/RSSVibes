@@ -81,3 +81,27 @@ data/state.json  your saved dashboard (created on first run)
 - The weather widget uses the free [Open-Meteo](https://open-meteo.com/) API — no key
   required; it geocodes the city name you type and caches results for 10 minutes.
 - Bookmark favicons load from Google's public favicon service; everything else is local.
+
+## Changelog
+
+### v0.2.0
+
+- **Netvibes / OPML import** — bring your feeds in from a Netvibes `.zip`/`.opml` export
+  or any OPML file (Feedly, Inoreader, …). Netvibes tabs become pages, each feed's
+  column/row position is preserved, and non-RSS widgets are skipped.
+  (**⚙ Settings → Import Netvibes / OPML**)
+- **Netvibes / OPML export** — save your feeds back out as a Netvibes-compatible OPML
+  file; round-trips losslessly with the importer.
+  (**⚙ Settings → Export Netvibes / OPML**)
+- **Weather widget** — current conditions plus a 4-day forecast for any city, via the
+  free, keyless [Open-Meteo](https://open-meteo.com/) API; metric or imperial units.
+  (**＋ Widget → Weather**)
+- **Fix** — the modal/reader overlay no longer stays on top of the page: previously it
+  blurred the whole dashboard and blocked all mouse and keyboard input.
+
+### v0.1.0
+
+- Initial release: tabbed pages, a drag-and-drop widget grid, RSS/Atom feed widgets with
+  a reading pane, Notes / Clock / Bookmarks widgets, light/dark themes with accent colors,
+  and local `state.json` persistence with JSON export/import. Zero dependencies (Python
+  standard library only).
