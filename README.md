@@ -97,7 +97,7 @@ data/state.json  your saved dashboard (created on first run)
 
 ## Changelog
 
-### Unreleased
+### v0.3.0
 
 - **River of News** — a new **≋ River** view that merges every feed across all pages into
   one reverse-chronological stream; click any item to read it, closes back to the dashboard.
