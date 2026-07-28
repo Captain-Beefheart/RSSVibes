@@ -935,16 +935,23 @@ def open_browser(url):
 
 
 def main():
-    # A PyInstaller --windowed (.exe) build has no console: sys.stdout/stderr are
-    # None. Prints and the request logger (sys.stderr.write) would then raise and
-    # crash every request handler mid-response, so route them to a harmless sink.
-    _sink = open(os.devnull, "w")
-    if sys.stdout is None:
-        sys.stdout = _sink
-    if sys.stderr is None:
-        sys.stderr = _sink
-
     os.makedirs(DATA_DIR, exist_ok=True)
+
+    # A packaged app (PyInstaller --windowed .exe / AppImage) has no console, so
+    # sys.stdout/stderr are None. Prints and the request logger (sys.stderr.write)
+    # would then raise and crash every request handler mid-response — route them
+    # to a log file instead (also handy for diagnosing issues).
+    if sys.stdout is None or sys.stderr is None:
+        try:
+            logf = open(os.path.join(DATA_DIR, "rssvibes.log"), "a", buffering=1,
+                        encoding="utf-8", errors="replace")
+        except OSError:
+            logf = open(os.devnull, "w")
+        if sys.stdout is None:
+            sys.stdout = logf
+        if sys.stderr is None:
+            sys.stderr = logf
+
     url = "http://%s:%d/" % (HOST, PORT)
 
     try:
