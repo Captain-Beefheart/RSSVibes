@@ -894,6 +894,25 @@ async function refreshRiver() {
   await renderRiver();
 }
 
+/* ---------------------------------------------------------------- stop server */
+async function stopServer() {
+  if (!confirm("Stop the RSSVibes server?\n\nThis closes the app. Relaunch RSSVibes to use it again.")) return;
+  flushBeacon();                                  // save any pending change first
+  try { await fetch("/api/quit", { method: "POST" }); } catch (e) {}
+  showStopped();
+}
+
+function showStopped() {
+  document.title = "RSSVibes — stopped";
+  document.body.innerHTML =
+    `<div class="stopped"><div class="stopped-card">
+       <div class="stopped-ico">⏻</div>
+       <h1>RSSVibes server stopped</h1>
+       <p>You can close this window. Relaunch RSSVibes to start again.</p>
+       <button class="btn" onclick="location.reload()">Reconnect</button>
+     </div></div>`;
+}
+
 /* ---------------------------------------------------------------- boot */
 function boot() { applyTheme(); renderTabs(); renderBoard(); scheduleRefresh(); }
 
@@ -904,6 +923,7 @@ async function init() {
   $("#addFeedBtn").onclick = addFeedDialog;
   $("#refreshAllBtn").onclick = refreshAllFeeds;
   $("#settingsBtn").onclick = settingsDialog;
+  $("#quitBtn").onclick = stopServer;
   $("#riverBtn").onclick = () => riverOpen ? closeRiver() : openRiver();
   $("#riverClose").onclick = closeRiver;
   $("#riverRefresh").onclick = refreshRiver;

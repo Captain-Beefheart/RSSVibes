@@ -25,6 +25,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import webbrowser
 import zipfile
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -33,9 +34,31 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape, quoteattr
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FROZEN = getattr(sys, "frozen", False)   # running as a PyInstaller .exe / AppImage?
+
+
+def _bundle_dir():
+    """Directory holding bundled assets (web/). PyInstaller extracts to _MEIPASS."""
+    if FROZEN:
+        return getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _data_dir():
+    """Writable location for state.json. Next to the source when running as a
+    script; a per-user data dir when packaged (the bundle is read-only/temporary)."""
+    if not FROZEN:
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+    if os.name == "nt":
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return os.path.join(base, "RSSVibes")
+
+
+BASE_DIR = _bundle_dir()
 WEB_DIR = os.path.join(BASE_DIR, "web")
-DATA_DIR = os.path.join(BASE_DIR, "data")
+DATA_DIR = _data_dir()
 STATE_FILE = os.path.join(DATA_DIR, "state.json")
 
 HOST = "127.0.0.1"
@@ -741,9 +764,25 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_import()
         if path == "/api/export":
             return self.api_export()
+        if path == "/api/quit":
+            return self.api_quit()
         if path == "/api/state":
             return self.api_state_put()
         self.send_error(404)
+
+    def api_quit(self):
+        """Stop the server (from the in-app 'Stop server' button)."""
+        self._read_body()  # drain any body (e.g. a sendBeacon save fired first)
+        self._send_json({"ok": True, "stopping": True})
+        # shutdown() must run off the serve_forever thread; this handler is on a
+        # worker thread, so a short-lived helper thread does the job after the
+        # response has flushed.
+        srv = self.server
+
+        def _stop():
+            time.sleep(0.3)
+            srv.shutdown()
+        threading.Thread(target=_stop, daemon=True).start()
 
     # -- API ---------------------------------------------------------------
     def api_feed(self, qs):
@@ -891,20 +930,40 @@ class Handler(BaseHTTPRequestHandler):
         self._send_bytes(body, ctype, cache=(ext in (".png", ".ico", ".svg")))
 
 
+def open_browser(url):
+    threading.Thread(target=lambda: (time.sleep(0.8), webbrowser.open(url)), daemon=True).start()
+
+
 def main():
     os.makedirs(DATA_DIR, exist_ok=True)
-    httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     url = "http://%s:%d/" % (HOST, PORT)
+
+    try:
+        httpd = ThreadingHTTPServer((HOST, PORT), Handler)
+    except OSError:
+        # Port already in use — RSSVibes is probably already running.
+        # Just open the browser to the existing instance and exit.
+        print("RSSVibes already running; opening %s" % url)
+        webbrowser.open(url)
+        return
+
     print("=" * 60)
-    print("  Local RSS Dashboard running at:")
+    print("  RSSVibes running at:")
     print("    " + url)
-    print("  Press Ctrl+C to stop.")
+    print("  Use the ⏻ Stop button in the app, or press Ctrl+C here.")
     print("=" * 60)
+
+    # A packaged app has no console, so open the browser automatically.
+    # (Set RSSVIBES_OPEN=1 to force this when running as a script.)
+    if FROZEN or os.environ.get("RSSVIBES_OPEN"):
+        open_browser(url)
+
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nShutting down.")
         httpd.shutdown()
+    httpd.server_close()
 
 
 if __name__ == "__main__":

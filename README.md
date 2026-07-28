@@ -12,7 +12,19 @@ weather data you choose to load).
 
 ![RSSVibes — the River of News view, merging every feed across all pages into one chronological stream](docs/screenshot.png)
 
-## Run it
+## Download
+
+Grab a self-contained build from the [**Releases**](https://github.com/Captain-Beefheart/RSSVibes/releases)
+page — **no Python needed**:
+
+- **Windows:** `RSSVibes.exe` — double-click to launch; your browser opens to the dashboard.
+- **Linux:** `RSSVibes-x86_64.AppImage` — `chmod +x` it, then run.
+
+Because the packaged app has no console window, use the **⏻ Stop** button in the top-right to
+shut the server down (or just close the tab and quit the process). Your dashboard is saved to a
+per-user data folder (`%APPDATA%\RSSVibes` on Windows, `~/.local/share/RSSVibes` on Linux).
+
+## Run from source
 
 **As a desktop app** (Windows) — double-click **`RSSVibes.vbs`**. It starts the server and
 opens RSSVibes in its own chromeless window (Edge/Chrome "app mode"), then shuts the server
@@ -52,6 +64,7 @@ which is what makes the feeds actually load. It also:
 | New page | **＋** next to the tabs |
 | Page settings | Double-click a tab — rename it or set its **column count** (1–5, per page) |
 | Theme & accent | **⚙** in the top-right |
+| Stop the server | **⏻** in the top-right — quits RSSVibes (the packaged app has no console) |
 | Read an article | Click an item → reading pane slides in |
 | River of News | **≋ River** in the top bar — every feed merged into one chronological stream |
 | Import subscriptions | **⚙ → Import Netvibes / OPML** — a Netvibes `.zip`/`.opml` export or any OPML file |

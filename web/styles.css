@@ -132,6 +132,7 @@ body {
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .btn.primary:hover { filter: brightness(1.06); color: var(--accent-ink); }
 .btn.ghost { border-color: transparent; background: transparent; }
+.btn.danger:hover { border-color: #e5487a; color: #e5487a; }
 .btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .btn.active:hover { color: var(--accent-ink); filter: brightness(1.06); }
 .btn:disabled { opacity: .5; cursor: default; }
@@ -366,6 +367,15 @@ body {
   max-width: 90vw;
 }
 .toast.err { background: #d0596e; color: #fff; }
+
+/* -------------------------------------------------- stopped overlay */
+.stopped { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px;
+  background: radial-gradient(1200px 500px at 15% -10%, var(--bg-grad-1), transparent 60%), linear-gradient(180deg, var(--bg-grad-1), var(--bg-grad-2)); }
+.stopped-card { text-align: center; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 16px; box-shadow: var(--shadow-lift); padding: 40px 48px; max-width: 380px; }
+.stopped-ico { font-size: 46px; color: var(--ink-faint); line-height: 1; }
+.stopped-card h1 { margin: 12px 0 6px; font-size: 20px; color: var(--ink); }
+.stopped-card p { color: var(--ink-soft); margin: 0 0 18px; }
 
 /* -------------------------------------------------- misc */
 .empty-board {

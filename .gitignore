@@ -8,6 +8,15 @@ __pycache__/
 .venv/
 venv/
 
+# Build output (PyInstaller / AppImage / generated icons)
+build/
+dist/
+*.spec
+AppDir/
+*.AppImage
+rssvibes.ico
+rssvibes.png
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db

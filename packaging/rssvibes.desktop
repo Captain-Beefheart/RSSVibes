@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=RSSVibes
+Comment=Local Netvibes-style RSS reader
+Exec=RSSVibes
+Icon=rssvibes
+Categories=Network;
+Terminal=false
