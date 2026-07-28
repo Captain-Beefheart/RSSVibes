@@ -112,6 +112,18 @@ data/state.json  your saved dashboard (created on first run)
 
 ## Changelog
 
+### v0.4.0
+
+- **Self-contained downloads** — prebuilt `RSSVibes.exe` (Windows) and
+  `RSSVibes-x86_64.AppImage` (Linux) attached to each release; **no Python needed**.
+  Built by CI (PyInstaller one-file + AppImage). Launch it and your browser opens to the
+  dashboard; state lives in a per-user data folder.
+- **⏻ Stop-server button** — quit RSSVibes from the top bar (`POST /api/quit`, graceful
+  shutdown). Needed because the packaged app has no console window to Ctrl-C.
+- Packaged app is bundle-aware (finds `web/` inside the bundle, stores `state.json` in
+  `%APPDATA%\RSSVibes` / `~/.local/share/RSSVibes`, writes a log file) and a second launch
+  just opens the browser to the already-running instance.
+
 ### v0.3.1
 
 - **Fix: imports now persist immediately** — imported feeds are written to `data/state.json`
