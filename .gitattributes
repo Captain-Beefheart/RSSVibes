@@ -1,0 +1,10 @@
+# Normalize line endings across Windows/Linux (CI builds on both)
+* text=auto
+
+# Windows launchers stay CRLF
+*.bat text eol=crlf
+*.vbs text eol=crlf
+
+# Unix scripts must stay LF — they run on Linux in CI and inside the AppImage
+packaging/AppRun text eol=lf
+*.sh text eol=lf
