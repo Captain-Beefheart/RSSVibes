@@ -935,6 +935,15 @@ def open_browser(url):
 
 
 def main():
+    # A PyInstaller --windowed (.exe) build has no console: sys.stdout/stderr are
+    # None. Prints and the request logger (sys.stderr.write) would then raise and
+    # crash every request handler mid-response, so route them to a harmless sink.
+    _sink = open(os.devnull, "w")
+    if sys.stdout is None:
+        sys.stdout = _sink
+    if sys.stderr is None:
+        sys.stderr = _sink
+
     os.makedirs(DATA_DIR, exist_ok=True)
     url = "http://%s:%d/" % (HOST, PORT)
 
